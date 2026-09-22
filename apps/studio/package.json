@@ -1,0 +1,24 @@
+{
+  "name": "@vidriera/studio",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "sanity dev",
+    "build": "sanity build",
+    "deploy": "sanity deploy",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@vidriera/contracts": "workspace:*",
+    "react": "^19.2.2",
+    "react-dom": "^19.2.2",
+    "sanity": "^6.15.0",
+    "styled-components": "^6.1.15"
+  },
+  "devDependencies": {
+    "@sanity/cli": "^8.12.0",
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.7"
+  }
+}
