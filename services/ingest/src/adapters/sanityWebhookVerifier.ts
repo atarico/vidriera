@@ -8,8 +8,26 @@ import type { WebhookSignatureVerifier } from '../ports'
  * Sanity signs webhook requests with an HMAC-SHA256 over
  * `${timestampMs}.${rawBody}`, base64url-encoded, carried in the
  * `sanity-webhook-signature` header as `t=<timestampMs>,v1=<signature>`.
- * The package's isValidSignature() performs a timing-safe comparison
- * internally (via the Web Crypto API); we never compare signatures by hand.
+ *
+ * Residual risk, stated accurately: `isValidSignature()` in the installed
+ * `@sanity/webhook@4.0.4` does NOT do a timing-safe comparison. Its dist
+ * (`node_modules/@sanity/webhook/dist/index.js`) compares the computed and
+ * received signatures with a plain `if (signature !== encoded)`, and the
+ * package contains zero references to `timingSafeEqual` anywhere. An
+ * earlier version of this comment claimed the opposite; that claim was
+ * false and has been corrected.
+ *
+ * We accept this rather than hand-rolling our own HMAC verification. A
+ * remote timing attack against a SHA-256 HMAC digest comparison over HTTP
+ * is widely considered impractical in practice: network jitter (typically
+ * milliseconds) dwarfs the nanosecond-scale timing signal a `!==`
+ * early-exit could leak, and the attacker would need an implausible number
+ * of low-noise samples to extract even one byte of the digest. Hand-rolled
+ * crypto comparison code is a well-known source of real bugs (off-by-one
+ * exits, non-constant-time "constant-time" implementations, etc.), so this
+ * trades a theoretical, impractical risk for a real one we are not willing
+ * to take on. If this dependency is ever upgraded, re-verify this claim
+ * against the new dist rather than assuming it still holds.
  */
 export function createSanityWebhookVerifier(secret: string): WebhookSignatureVerifier {
   return {

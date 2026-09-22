@@ -310,13 +310,66 @@ Every other page is zero-JS static HTML. This is inherent to `react-instantsearc
 recorded rather than hidden. If it proves too heavy on a slow mobile connection, the
 island can be replaced with a direct fetch against the Algolia REST API.
 
+## Independent verification (RDD off-path, high tier)
+
+The user declined the native review for the storefront candidate. A decline drops to the
+RDD off path, where a `high` tier requires writer self-verification **plus an
+independent verifier**, so one read-only verifier was run against the security-critical
+surface only — not the whole 4860-line diff.
+
+It returned `verified` for indexer idempotency and partial-batch reporting, the replay
+poison-message counter, and Terraform IAM/SSM least privilege (no wildcard resource ARNs;
+secrets correctly classified `SecureString`). It found three real defects, each
+re-confirmed by the orchestrator against the actual code before any fix was written.
+
+### D1 — one malformed product name broke the entire static build
+
+`encodeURIComponent` throws `URIError: URI malformed` on a lone UTF-16 surrogate, and
+`productos/[slug].astro` called `buildWhatsAppOrderLink` unguarded. With
+`output: 'static'` every product page is prerendered at build time, so a single product
+whose name picked up a broken character — a bad paste into Sanity, a mangled import —
+failed the whole deploy, not just that product.
+
+Fixed with `sanitizeSurrogates`, which strips unpaired surrogates while preserving valid
+pairs, so a shop owner typing an emoji into a product name still works. Verified:
+emoji intact, lone surrogate does not throw.
+
+### D2 — the admin-key guard could be walked around
+
+`ENV_ACCESS_PATTERN` matched only dot access. Bracket notation, destructuring and
+renamed destructuring all produced zero matches. The script also scanned only `src/`
+(missing `astro.config.mjs`, where a Vite `define` can inject a secret straight into the
+bundle) and only `.ts/.tsx/.astro` (missing `.js`/`.mjs`).
+
+All four closed. The orchestrator independently re-ran the bypass with
+`import.meta.env['PUBLIC_ALGOLIA_ADMIN_API_KEY']`: the guard now names the file and the
+variable, exits 1, and `astro build` never runs.
+
+**Known gap, deliberately left and pinned by a test:** `const e = import.meta.env;
+e.PUBLIC_ADMIN_KEY` cannot be caught reliably by regex. It is documented in a comment
+rather than implied to be covered. An honest limit beats a false guarantee.
+
+### D3 — a security comment that was factually false
+
+`sanityWebhookVerifier.ts` claimed `@sanity/webhook` compares signatures timing-safely.
+The shipped package does `if (signature !== encoded)`, and `timingSafeEqual` appears
+zero times in it.
+
+The signature verification code was deliberately **not** touched. The comment now states
+what the dependency actually does and records the accepted tradeoff: a remote timing
+attack against an HMAC-SHA256 digest over HTTP is impractical because network jitter
+dwarfs the signal, and hand-rolling crypto to close a theoretical gap usually opens a
+real one. A comment that lies about a security property is worse than no comment,
+because the next reader stops checking.
+
 ## Feature status
 
-All twelve tasks are complete. Final verification, re-run by the orchestrator:
+All twelve tasks are complete, plus the three verifier defects. Final verification,
+re-run by the orchestrator:
 
 | Check | Result |
 |-------|--------|
-| `pnpm vitest run` | **153 passed** (31 files) |
+| `pnpm vitest run` | **174 passed** (32 files) |
 | `pnpm typecheck` | pass — 8 workspace packages |
 | `pnpm lint` | clean |
 | `terraform validate` | `Success! The configuration is valid.` |
