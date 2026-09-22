@@ -1,0 +1,17 @@
+---
+import { copy } from '../lib/copy'
+
+export interface Props {
+  siteName: string
+}
+
+const { siteName } = Astro.props
+const tagline = import.meta.env.PUBLIC_SITE_TAGLINE || copy.site.defaultTagline
+---
+
+<header class="site-header">
+  <div class="page-shell site-header__inner">
+    <a class="site-header__name" href="/">{siteName}</a>
+    <p class="site-header__tagline">{tagline}</p>
+  </div>
+</header>

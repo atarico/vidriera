@@ -9,6 +9,7 @@ dist/
 *.tfvars
 !*.tfvars.example
 .sanity/
+.astro/
 coverage/
 *.log
 .DS_Store

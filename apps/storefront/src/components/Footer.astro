@@ -1,0 +1,16 @@
+---
+import { copy } from '../lib/copy'
+
+export interface Props {
+  siteName: string
+}
+
+const { siteName } = Astro.props
+const year = new Date().getFullYear()
+---
+
+<footer class="site-footer">
+  <div class="page-shell">
+    <p>{copy.footer.rights(year, siteName)}</p>
+  </div>
+</footer>

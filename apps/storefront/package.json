@@ -1,0 +1,26 @@
+{
+  "name": "@vidriera/storefront",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "node ./scripts/guard-source-env.ts && astro build && node ./scripts/guard-bundle-secrets.ts",
+    "preview": "astro preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@vidriera/contracts": "workspace:*",
+    "algoliasearch": "^5.59.0",
+    "astro": "^7.3.3",
+    "@astrojs/react": "^6.0.6",
+    "react": "^19.2.2",
+    "react-dom": "^19.2.2",
+    "react-instantsearch": "^7.50.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3"
+  }
+}

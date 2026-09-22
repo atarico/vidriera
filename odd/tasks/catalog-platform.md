@@ -86,8 +86,8 @@ Push, pull request creation, and merge remain user decisions.
 | T8 | Terraform: network, SQS + DLQ redrive, IAM roles | delegated | writer trigger: multiple .tf modules | [x] |
 | T9 | Terraform: Lambdas, ECR, ECS cluster and task definition | delegated | writer trigger: multiple .tf modules | [x] |
 | T10 | Terraform: S3 + CloudFront storefront, CloudWatch alarms, $1 budget | delegated | writer trigger: multiple .tf modules | [x] |
-| T11 | Astro storefront: Algolia InstantSearch, facet UI, WhatsApp order link | delegated | writer trigger: pages + islands + styles | [ ] |
-| T12 | Docs: README, architecture diagram, account setup checklist, runbook | delegated | writer trigger: multiple docs | [ ] |
+| T11 | Astro storefront: Algolia InstantSearch, facet UI, WhatsApp order link | delegated | writer trigger: pages + islands + styles | [x] |
+| T12 | Docs: README, architecture diagram, account setup checklist, runbook | delegated | writer trigger: multiple docs | [x] |
 
 ## Acceptance criteria
 
@@ -263,8 +263,81 @@ storage once the worker image is pushed.
 - Main queue visibility timeout is derived as `indexer_lambda_timeout * 6` in
   `locals.tf`, the AWS-recommended ratio, rather than a hardcoded value.
 
+## Storefront and documentation (T11–T12)
+
+Astro 7 static shell with a single React island for search. Docs: `README.md` plus
+`docs/{environment,setup,architecture,runbook}.md`.
+
+### Admin-key leak guard — verified by deliberate breakage
+
+Two layers, both wired into `pnpm --filter @vidriera/storefront build` and both
+unit-tested:
+
+1. **Pre-build source scan** — rejects any `import.meta.env` / `process.env` reference
+   whose name matches `/ADMIN|SECRET|MASTER|WRITE_KEY|_TOKEN\b/i`, *regardless of a
+   `PUBLIC_` prefix*. This targets the realistic failure: someone renaming an admin key
+   to `PUBLIC_ALGOLIA_ADMIN_API_KEY` to make it reachable in the browser.
+2. **Post-build bundle scan** — greps every emitted `dist/` file for the literal value
+   of known secret variables, catching a leak that arrived by any other route.
+
+The orchestrator verified layer 1 by injecting
+`import.meta.env.PUBLIC_ALGOLIA_ADMIN_API_KEY` into a probe file under
+`apps/storefront/src/lib/`. Observed: the guard named the offending file and variable,
+the build exited 1, and `astro build` never ran. Probe removed afterwards. A guard that
+has never been seen to fire is not a verified guard.
+
+### Swappability proven
+
+`facets.test.ts` builds two different `RubroProfile`s (a bookshop and a plant shop) and
+asserts `buildFacetConfig` yields two different, correctly ordered filter sets with
+different widget kinds. The filter UI is generated, not hardcoded — which is the whole
+point of the rubro profile.
+
+### Stale documentation, again
+
+context7's cached `react-instantsearch` snippets were pre-v7 (they still referenced the
+`react-instantsearch-hooks-web` split package and a default `algoliasearch/lite`
+export). The writer verified against the actual npm dist for the pinned versions
+instead. Ground truth: `react-instantsearch` v7 exports hooks and widgets directly,
+`algoliasearch/lite` exports a **named** `liteClient`, and `search()` takes
+`{ requests: [...] }` rather than a bare array. This is the second time in this feature
+that published documentation disagreed with shipped code.
+
+### Honest trade-off
+
+The search island is ~124 KB gzipped (react + react-instantsearch + algoliasearch/lite).
+Every other page is zero-JS static HTML. This is inherent to `react-instantsearch`;
+recorded rather than hidden. If it proves too heavy on a slow mobile connection, the
+island can be replaced with a direct fetch against the Algolia REST API.
+
+## Feature status
+
+All twelve tasks are complete. Final verification, re-run by the orchestrator:
+
+| Check | Result |
+|-------|--------|
+| `pnpm vitest run` | **153 passed** (31 files) |
+| `pnpm typecheck` | pass — 8 workspace packages |
+| `pnpm lint` | clean |
+| `terraform validate` | `Success! The configuration is valid.` |
+| `terraform fmt -check -recursive` | clean |
+| `pnpm --filter @vidriera/storefront build` | pass — 2 pages, both guards green |
+| admin-key guard, negative test | **fails the build as designed** |
+| `docker build` (reindex worker) | pass — non-root, 242 MB, non-zero exit on failure |
+
+Nothing was deployed. No AWS resource exists yet; no account has been created.
+
+## Remaining work — all of it needs the user
+
+1. Create the four accounts and fill `infra/terraform/terraform.tfvars`, following
+   `docs/setup.md`. **The AWS budget alarm at USD 1 comes before the first
+   `terraform apply`.**
+2. Confirm the SNS subscription email, or every alarm fires into nothing.
+3. Decide the `.env*` question: either grant write access so `.env.example` can exist,
+   or keep `docs/environment.md` as the credential reference.
+4. **Supply the rubro.** Then only `packages/contracts/src/rubro.ts` changes, and the
+   Sanity schema, the Algolia facets and the storefront filters all follow from it.
+
 ## Next step
 
-T11–T12 — Astro storefront (Algolia InstantSearch, facet UI, WhatsApp order link) and
-the documentation set, including `docs/environment.md`, which carries the credential
-reference that could not be written as `.env.example`.
+Awaiting the rubro. No further code work is queued.
