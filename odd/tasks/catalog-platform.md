@@ -83,9 +83,9 @@ Push, pull request creation, and merge remain user decisions.
 | T5 | Lambda `indexer`: SQS consumer, Cloudinary renditions, Algolia upsert, idempotency | delegated | writer trigger: handler + adapters + tests | [x] |
 | T6 | Lambda `replay`: drain DLQ back to the main queue with poison-message guard | delegated | writer trigger: handler + domain + tests | [x] |
 | T7 | ECS worker: throttled full reindex over all Sanity documents + Dockerfile | delegated | writer trigger: worker + throttle + tests + Dockerfile | [x] |
-| T8 | Terraform: network, SQS + DLQ redrive, IAM roles | delegated | writer trigger: multiple .tf modules | [ ] |
-| T9 | Terraform: Lambdas, ECR, ECS cluster and task definition | delegated | writer trigger: multiple .tf modules | [ ] |
-| T10 | Terraform: S3 + CloudFront storefront, CloudWatch alarms, $1 budget | delegated | writer trigger: multiple .tf modules | [ ] |
+| T8 | Terraform: network, SQS + DLQ redrive, IAM roles | delegated | writer trigger: multiple .tf modules | [x] |
+| T9 | Terraform: Lambdas, ECR, ECS cluster and task definition | delegated | writer trigger: multiple .tf modules | [x] |
+| T10 | Terraform: S3 + CloudFront storefront, CloudWatch alarms, $1 budget | delegated | writer trigger: multiple .tf modules | [x] |
 | T11 | Astro storefront: Algolia InstantSearch, facet UI, WhatsApp order link | delegated | writer trigger: pages + islands + styles | [ ] |
 | T12 | Docs: README, architecture diagram, account setup checklist, runbook | delegated | writer trigger: multiple docs | [ ] |
 
@@ -225,7 +225,46 @@ implying one. Clock-skew rejection is therefore implemented as our own domain ru
 | reindex-worker | indexer's Sanity/Cloudinary/Algolia vars, plus `REINDEX_MIN_INTERVAL_MS` (opt, 100), `REINDEX_PAGE_SIZE` (opt, 100) |
 | studio | `SANITY_STUDIO_PROJECT_ID`, `SANITY_STUDIO_DATASET` (the `SANITY_STUDIO_` prefix is mandatory for Vite to embed them) |
 
+## Infrastructure (T8–T10)
+
+19 files under `infra/terraform/`, ~1550 lines. Provider pinned `hashicorp/aws ~> 6.0`
+(resolved v6.66.0).
+
+### Security fix found while writing it
+
+`.gitignore` covered `*.tfstate*`, `.terraform/` and `.env*` but **not** `*.tfvars`. A
+filled-in `terraform.tfvars` holding the Algolia admin key, Cloudinary secret and Sanity
+webhook secret would have been committable. Now ignored, with `!*.tfvars.example`
+preserved so the template stays tracked. Verified with `git check-ignore`.
+
+### Cost decisions, each commented in place so they are not silently reverted
+
+| Decision | Alternative rejected | Saving |
+|---|---|---|
+| Public subnets only, Fargate task gets a public IP | NAT Gateway | ~USD 33/month |
+| SSM Parameter Store (standard tier) | Secrets Manager, ~USD 0.40 × 10 params | ~USD 4/month |
+| `desired_count = 0` on the ECS service | leaving it at 1 | ~USD 9/month |
+| Explicit short log retention | CloudWatch default "never expire" | unbounded drift |
+| Lambda Function URL for `ingest` | API Gateway | per-request cost |
+
+Idle cost is effectively **USD 0**; the only non-zero lines are cents of ECR image
+storage once the worker image is pushed.
+
+### Operational notes
+
+- An ECS **Service** restarts an exited task, so a service is the wrong trigger for a
+  one-shot batch. Use `aws ecs run-task` to run a reindex. Commented at the resource.
+- `runtime_platform` is pinned `X86_64` to match the Dockerfile's `node:22-alpine`
+  build. Building the image on an ARM host requires
+  `docker buildx build --platform linux/amd64`, or the task fails at start with an
+  exec-format error.
+- The SNS email subscription must be confirmed by clicking the emailed link, or every
+  alarm fires silently into nothing.
+- Main queue visibility timeout is derived as `indexer_lambda_timeout * 6` in
+  `locals.tf`, the AWS-recommended ratio, rather than a hardcoded value.
+
 ## Next step
 
-T8–T10 — Terraform: network, queues with redrive, IAM, Lambdas, ECR, ECS,
-S3 + CloudFront, CloudWatch alarms and the USD 1 budget.
+T11–T12 — Astro storefront (Algolia InstantSearch, facet UI, WhatsApp order link) and
+the documentation set, including `docs/environment.md`, which carries the credential
+reference that could not be written as `.env.example`.

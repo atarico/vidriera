@@ -6,6 +6,8 @@ dist/
 .terraform/
 *.tfstate
 *.tfstate.*
+*.tfvars
+!*.tfvars.example
 .sanity/
 coverage/
 *.log
