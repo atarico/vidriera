@@ -1,0 +1,18 @@
+{
+  "name": "@vidriera/indexer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/handler.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@vidriera/contracts": "workspace:*",
+    "@vidriera/catalog-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.163",
+    "@types/node": "^22.10.5"
+  }
+}
