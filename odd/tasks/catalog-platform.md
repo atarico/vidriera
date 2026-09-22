@@ -362,6 +362,69 @@ dwarfs the signal, and hand-rolling crypto to close a theoretical gap usually op
 real one. A comment that lies about a security property is worse than no comment,
 because the next reader stops checking.
 
+## Judgment Day ledger — round 1
+
+```yaml
+target_identity: 6e5e11fcb2e8e2d229d8ebcf9d3c100c9a6b0556
+round: 1
+confirmed: []
+suspect:
+  - id: JD-1
+    judge: A
+    location: apps/storefront/src/lib/price.ts:8-16
+    severity: CRITICAL
+    status: open — parent-corroborated, awaiting human decision
+info:
+  - id: JD-2
+    judge: B
+    location: services/replay/src/adapters/sqsDlqAdapter.ts:36-67
+    severity: WARNING
+contradictions: []
+fix_work_units: []
+scoped_rejudgment: not_run
+terminal_state: escalated
+skill_resolution: fallback-path — /home/atarico/.claude/skills/security-check/SKILL.md (no project registry)
+```
+
+Two blind judges, identical frozen scope, zero overlap in what they found. No finding was
+confirmed by both, so the protocol authorizes no automatic correction.
+
+### JD-1 (suspect, CRITICAL) — a blank currency field breaks the whole build
+
+`apps/studio/src/schemas/product.ts:58` declares `currency` as an unvalidated, optional
+`string`. `apps/storefront/src/pages/productos/[slug].astro:77` passes it straight to
+`Intl.NumberFormat` with no guard, at build time, for every prerendered product page.
+
+Orchestrator-verified by execution, not inference:
+
+| `currency` value | Result |
+|---|---|
+| `''` | `RangeError` |
+| `'pesos'` | `RangeError` |
+| `undefined` | `TypeError` |
+| `'ars'` | accepted (case-insensitive) |
+| `'ARS'` | correct |
+
+A shop owner who leaves the field blank, or types `pesos` because it reads more clearly,
+fails the entire deploy.
+
+**This is the same failure class as D1**, the surrogate crash fixed one commit earlier:
+untrusted CMS content reaching a throwing built-in during static prerender, where one bad
+record takes down every page. D1 was fixed as an instance. The class was not. That is the
+real finding, and a single-field patch would repeat the mistake — the durable fix is to
+make prerendering resilient to any one bad record.
+
+Reported by one judge only, so it is recorded as suspect and **not auto-fixed**, per the
+protocol. It is escalated because the parent reproduced it deterministically.
+
+### JD-2 (info, WARNING) — the DLQ drain can stop early
+
+`sqsDlqAdapter.ts:63-66` treats `received.length < batchSize` as "the queue is empty".
+SQS `ReceiveMessage` may return fewer messages than requested even when more exist,
+because short polling (`WaitTimeSeconds: 0`, line 43) samples a subset of servers. A
+replay run can therefore under-drain and under-report. No message is lost; a backlog just
+needs more runs. Informational, not blocking.
+
 ## Feature status
 
 All twelve tasks are complete, plus the three verifier defects. Final verification,
@@ -391,6 +454,37 @@ Nothing was deployed. No AWS resource exists yet; no account has been created.
 4. **Supply the rubro.** Then only `packages/contracts/src/rubro.ts` changes, and the
    Sanity schema, the Algolia facets and the storefront filters all follow from it.
 
-## Next step
+## Next step — two open items, both deferred by the user on 2026-09-22
 
-Awaiting the rubro. No further code work is queued.
+### 1. JD-1 is open and unfixed (CRITICAL)
+
+A product saved with a blank or non-ISO currency fails the entire `astro build`.
+Reproduced by execution, not inferred — see the Judgment Day ledger above for the table.
+
+The user deferred the fix. The design question is still unanswered and should be settled
+before writing code: **fix the class, or patch the field?**
+
+The recommendation on record is to fix the class. `currency` is the second instance of
+the same pattern in two commits — untrusted CMS content reaching a throwing built-in
+during static prerender, where one bad record takes down every page. D1 (the lone
+surrogate in `whatsapp.ts`) was the first. Patching field by field invites a third
+instance in `slug`, an image URL, or any other field a shop owner fills in unexpectedly.
+
+### 2. The rubro is still unknown
+
+When it arrives, only `packages/contracts/src/rubro.ts` changes. The Sanity schema, the
+Algolia facets and the storefront filters all derive from it.
+
+## Engram memory could not be written
+
+Three save attempts failed with `ambiguous_project`. Cause: the Engram MCP server runs
+with `/home/atarico/Escritorio/proyectos` as its working directory, finds roughly thirty
+git repositories inside it, and cannot resolve which one this is. It accepts only
+projects it already knows, and `vidriera` is not among them.
+
+`.engram/config.json` has been added to this repository, which resolves the project when
+the working directory **is** this repository. Starting the next session from inside
+`/home/atarico/Escritorio/proyectos/vidriera` should therefore let memory save normally.
+
+Nothing was lost. This document is the durable record, and it is committed. Memory was
+the backup, not the source of truth.
