@@ -102,7 +102,7 @@ ships with today (see "What's left to do," below).
 
 Three things deploy independently:
 
-1. **Sanity Studio** — `pnpm --filter @vidriera/studio deploy` (needs a Sanity
+1. **Sanity Studio** — `pnpm --filter @vidriera/studio run deploy` (needs a Sanity
    account; hosted on Sanity's own infrastructure, free).
 2. **Infrastructure** — `terraform apply` from `infra/terraform`, after filling in
    `terraform.tfvars` (copy from `terraform.tfvars.example`). Provisions the queues,

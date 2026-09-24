@@ -51,7 +51,7 @@ it must exist before you run `terraform apply` even once.**
       enter this same value into the webhook config in step 6, after the ingest
       Lambda's Function URL exists.
 - [ ] Deploy the Studio once accounts are wired up:
-      `SANITY_STUDIO_PROJECT_ID=... SANITY_STUDIO_DATASET=... pnpm --filter @vidriera/studio deploy`.
+      `SANITY_STUDIO_PROJECT_ID=... SANITY_STUDIO_DATASET=... pnpm --filter @vidriera/studio run deploy`.
 
 ## 3. Algolia (search)
 
