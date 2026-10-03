@@ -34,6 +34,8 @@ resource "null_resource" "lambda_bundle" {
 
   provisioner "local-exec" {
     working_dir = local.repo_root
+    # pipefail is a bash option; the default /bin/sh (dash on Debian/Ubuntu) rejects it.
+    interpreter = ["bash", "-c"]
     command     = <<-EOT
       set -euo pipefail
       mkdir -p "${local.build_dir}/${each.key}"

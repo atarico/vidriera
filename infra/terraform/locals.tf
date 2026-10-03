@@ -20,7 +20,9 @@ locals {
   main_queue_visibility_timeout_seconds = var.indexer_lambda_timeout_seconds * 6
 
   repo_root = abspath("${path.module}/../..")
-  build_dir = "${path.module}/dist" # matches the existing "dist/" gitignore entry
+  # Absolute: the bundle step runs from repo_root while archive_file resolves
+  # paths from the Terraform working directory, so a relative path diverges.
+  build_dir = abspath("${path.module}/dist") # matches the existing "dist/" gitignore entry
 
   lambda_entrypoints = {
     ingest  = "services/ingest/src/handler.ts"
