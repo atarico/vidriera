@@ -6,9 +6,12 @@ dist
 .env
 .env.*
 !.env.example
-.terraform
-*.tfstate
-*.tfstate.*
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+**/*.tfplan
+**/tfplan
 .sanity
 coverage
 *.log

@@ -106,8 +106,10 @@ it must exist before you run `terraform apply` even once.**
       before the first `aws ecs run-task` (see `docs/runbook.md`):
       ```bash
       aws ecr get-login-password | docker login --username AWS --password-stdin <ecr_repository_url>
-      docker buildx build --platform linux/amd64 -t <ecr_repository_url>:latest services/reindex-worker --push
+      docker buildx build --platform linux/amd64 -f services/reindex-worker/Dockerfile -t <ecr_repository_url>:latest . --push
       ```
+      Run it from the repo root: the build context must be the whole workspace,
+      because the Dockerfile installs every pnpm workspace member.
       (`--platform linux/amd64` matters if you're building on an ARM machine — see
       `docs/architecture.md`.)
 
