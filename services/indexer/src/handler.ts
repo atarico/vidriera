@@ -3,9 +3,11 @@ import type { RubroProfile } from '@vidriera/contracts'
 import {
   createAlgoliaSearchIndex,
   createCloudinaryImageStore,
+  createGithubRepositoryDispatch,
+  createNoopRebuildTrigger,
   createSanityContentSource,
 } from '@vidriera/catalog-core'
-import type { ContentSource, ImageStore, SearchIndex } from '@vidriera/catalog-core'
+import type { ContentSource, ImageStore, RebuildTrigger, SearchIndex } from '@vidriera/catalog-core'
 import { genericRubroProfile } from '@vidriera/contracts'
 import { buildBatchItemFailures } from './domain/buildBatchItemFailures'
 import { indexMessage } from './domain/indexMessage'
@@ -16,6 +18,7 @@ export interface HandlerDependencies {
   imageStore: ImageStore
   searchIndex: SearchIndex
   profile: RubroProfile
+  rebuildTrigger: RebuildTrigger
 }
 
 /**
@@ -45,6 +48,24 @@ export function createHandler(deps: HandlerDependencies): SqsBatchHandler {
         }
       }),
     )
+
+    // One rebuild per batch, and only if the catalog actually changed: a
+    // skipped-only or all-failed batch leaves the published site accurate.
+    const changed = outcomes.filter(
+      (o) =>
+        o.ok && o.outcome && (o.outcome.status === 'indexed' || o.outcome.status === 'deleted'),
+    ).length
+    if (changed > 0) {
+      try {
+        await deps.rebuildTrigger.trigger(`indexer batch changed ${changed} document(s)`)
+      } catch (error) {
+        // Contained: the records are already indexed, so failing the batch
+        // would only redrive healthy messages.
+        console.error(
+          `Storefront rebuild trigger failed: ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+    }
 
     return buildBatchItemFailures(outcomes)
   }
@@ -84,9 +105,31 @@ function buildDependenciesFromEnv(): HandlerDependencies {
       apiKey: cloudinaryApiKey,
       apiSecret: cloudinaryApiSecret,
     }),
-    searchIndex: createAlgoliaSearchIndex({ appId: algoliaAppId, apiKey: algoliaAdminKey, indexName: algoliaIndexName }),
+    searchIndex: createAlgoliaSearchIndex({
+      appId: algoliaAppId,
+      apiKey: algoliaAdminKey,
+      indexName: algoliaIndexName,
+    }),
     profile,
+    rebuildTrigger: buildRebuildTriggerFromEnv(),
   }
+}
+
+// Both vars set enables rebuilds, both absent disables them; a half-configured
+// pair is almost certainly a mistake, so fail at cold start instead of
+// silently never rebuilding.
+function buildRebuildTriggerFromEnv(): RebuildTrigger {
+  const token = process.env.REBUILD_GITHUB_TOKEN
+  const repository = process.env.REBUILD_GITHUB_REPOSITORY
+  if (token && repository) {
+    return createGithubRepositoryDispatch({ token, repository })
+  }
+  if (!token && !repository) {
+    return createNoopRebuildTrigger()
+  }
+  throw new Error(
+    'REBUILD_GITHUB_TOKEN and REBUILD_GITHUB_REPOSITORY must be set together or both left unset',
+  )
 }
 
 function requireEnv(name: string): string {

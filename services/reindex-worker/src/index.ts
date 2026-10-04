@@ -1,10 +1,14 @@
 import {
   createAlgoliaSearchIndex,
   createCloudinaryImageStore,
+  createGithubRepositoryDispatch,
+  createNoopRebuildTrigger,
   createSanityContentSource,
 } from '@vidriera/catalog-core'
+import type { RebuildTrigger } from '@vidriera/catalog-core'
 import { genericRubroProfile } from '@vidriera/contracts'
 import { createThrottler, systemClock } from './domain/throttle'
+import { triggerRebuildAfterReindex } from './domain/rebuild'
 import { reindexAll } from './domain/run'
 
 const DEFAULT_PAGE_SIZE = 100
@@ -16,6 +20,22 @@ function requireEnv(name: string): string {
     throw new Error(`${name} is not set`)
   }
   return value
+}
+
+// Both vars set enables rebuilds, both absent disables them; half-configured
+// fails fast instead of silently never rebuilding.
+function buildRebuildTriggerFromEnv(): RebuildTrigger {
+  const token = process.env.REBUILD_GITHUB_TOKEN
+  const repository = process.env.REBUILD_GITHUB_REPOSITORY
+  if (token && repository) {
+    return createGithubRepositoryDispatch({ token, repository })
+  }
+  if (!token && !repository) {
+    return createNoopRebuildTrigger()
+  }
+  throw new Error(
+    'REBUILD_GITHUB_TOKEN and REBUILD_GITHUB_REPOSITORY must be set together or both left unset',
+  )
 }
 
 /**
@@ -49,7 +69,11 @@ async function main(): Promise<void> {
   const minIntervalMs = process.env.REINDEX_MIN_INTERVAL_MS
     ? Number(process.env.REINDEX_MIN_INTERVAL_MS)
     : DEFAULT_MIN_INTERVAL_MS
-  const pageSize = process.env.REINDEX_PAGE_SIZE ? Number(process.env.REINDEX_PAGE_SIZE) : DEFAULT_PAGE_SIZE
+  const pageSize = process.env.REINDEX_PAGE_SIZE
+    ? Number(process.env.REINDEX_PAGE_SIZE)
+    : DEFAULT_PAGE_SIZE
+
+  const rebuildTrigger = buildRebuildTriggerFromEnv()
 
   const summary = await reindexAll({
     contentSource,
@@ -61,6 +85,8 @@ async function main(): Promise<void> {
   })
 
   console.log(JSON.stringify(summary))
+
+  await triggerRebuildAfterReindex(summary, rebuildTrigger)
 
   if (summary.failed > 0) {
     process.exitCode = 1
