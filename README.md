@@ -129,6 +129,14 @@ alarma de presupuesto, antes de cualquier `terraform apply`) está en
 errores, reindexado completo, control de costos) está en
 [`docs/runbook.md`](docs/runbook.md).
 
+## Costos
+
+Operar la tienda cuesta **USD 0 a 1 por mes, más el dominio**. El límite a vigilar son
+las **10.000 búsquedas por mes de Algolia**: con más de ~1.000 visitas mensuales hay
+que agregar debounce a la búsqueda o pasar al plan Grow. Al crear la cuenta de AWS,
+conviene elegir el **plan Paid** (el Free se suspende a los 6 meses). Detalle,
+escenarios y fuentes en [`docs/costos.md`](docs/costos.md).
+
 ## Qué falta
 
 La plataforma está deployada y verificada de punta a punta (ver la sección
