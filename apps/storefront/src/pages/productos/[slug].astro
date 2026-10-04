@@ -1,7 +1,7 @@
 ---
 import type { GetStaticPaths } from 'astro'
 import BaseLayout from '../../layouts/BaseLayout.astro'
-import { createSearchClient } from '../../lib/algoliaClient'
+import { createCatalogSearchClient } from '../../lib/algoliaClient'
 import { fetchAllCatalogRecords, readAlgoliaEnvConfig } from '../../lib/catalogClient'
 import { activeRubroProfile } from '../../lib/rubroProfile'
 import { productAttributeEntries } from '../../lib/productAttributes'
@@ -24,7 +24,7 @@ export const getStaticPaths = (async () => {
   const envConfig = readAlgoliaEnvConfig(import.meta.env)
   if (!envConfig) return []
 
-  const client = createSearchClient(envConfig)
+  const client = createCatalogSearchClient(envConfig)
   const records = await fetchAllCatalogRecords(client, envConfig.indexName)
 
   return records.map((record) => ({

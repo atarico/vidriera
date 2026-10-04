@@ -50,7 +50,7 @@ describe('fetchAllCatalogRecords', () => {
     const fakeClient: SearchClientPort = {
       async search(methodParams) {
         const req = methodParams.requests[0]
-        const page = (req?.params?.page as number | undefined) ?? 0
+        const page = req?.page ?? 0
         const hits = pages[page] ?? []
         return { results: [{ hits, nbPages: pages.length }] }
       },
@@ -58,6 +58,22 @@ describe('fetchAllCatalogRecords', () => {
 
     const records = await fetchAllCatalogRecords(fakeClient, 'catalog')
     expect(records.map((r) => r.objectID)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('sends flat search parameters, as the Algolia v5 client requires', async () => {
+    // v5 takes params either flat on the request or as a URL-encoded string.
+    // A nested params object is rejected by the API: "Expecting a string".
+    const requests: unknown[] = []
+    const fakeClient: SearchClientPort = {
+      async search(methodParams) {
+        requests.push(...methodParams.requests)
+        return { results: [{ hits: [], nbPages: 0 }] }
+      },
+    }
+
+    await fetchAllCatalogRecords(fakeClient, 'catalog')
+
+    expect(requests).toEqual([{ indexName: 'catalog', query: '', hitsPerPage: 1000, page: 0 }])
   })
 
   it('returns an empty array when the index has no records, without throwing', async () => {

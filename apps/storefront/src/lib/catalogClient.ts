@@ -32,16 +32,21 @@ export function readAlgoliaEnvConfig(
 
 /**
  * The slice of the Algolia v5 client's `search` method this module depends
- * on (see https://www.algolia.com/doc/api-reference/api-methods/search/ —
- * confirmed against the algoliasearch@5.59.0 type declarations rather than
- * assumed). Modeling it as a narrow port, rather than importing the vendor
- * SDK type directly, keeps fetchAllCatalogRecords unit-testable with a fake
- * and matches this repo's existing hexagonal style (see
+ * on (see https://www.algolia.com/doc/api-reference/api-methods/search/).
+ * Modeling it as a narrow port, rather than importing the vendor SDK type
+ * directly, keeps fetchAllCatalogRecords unit-testable with a fake and
+ * matches this repo's existing hexagonal style (see
  * packages/catalog-core/src/ports.ts).
+ *
+ * v5 search parameters sit flat on each request; `params` only accepts a
+ * URL-encoded string, and the API rejects a nested object with "Expecting a
+ * string". The vendor types cannot catch that: a request carrying an extra
+ * `params` object still matches their flat-parameters variant. The request
+ * shape is pinned by catalogClient.test.ts instead.
  */
 export interface SearchClientPort {
   search(methodParams: {
-    requests: Array<{ indexName: string; params?: Record<string, unknown> }>
+    requests: Array<{ indexName: string; query?: string; hitsPerPage?: number; page?: number }>
   }): Promise<{ results: Array<{ hits: CatalogRecord[]; nbPages: number }> }>
 }
 
@@ -66,7 +71,7 @@ export async function fetchAllCatalogRecords(
 
   do {
     const response = await client.search({
-      requests: [{ indexName, params: { query: '', hitsPerPage: MAX_HITS_PER_PAGE, page } }],
+      requests: [{ indexName, query: '', hitsPerPage: MAX_HITS_PER_PAGE, page }],
     })
     const result = response.results[0]
     if (!result) break

@@ -1,6 +1,7 @@
 import { liteClient } from 'algoliasearch/lite'
 import type { LiteClient } from 'algoliasearch/lite'
-import type { AlgoliaEnvConfig } from './catalogClient'
+import type { CatalogRecord } from '@vidriera/contracts'
+import type { AlgoliaEnvConfig, SearchClientPort } from './catalogClient'
 
 /**
  * The only file in this app allowed to import `algoliasearch/lite`. Used
@@ -16,4 +17,25 @@ import type { AlgoliaEnvConfig } from './catalogClient'
  */
 export function createSearchClient(config: AlgoliaEnvConfig): LiteClient {
   return liteClient(config.appId, config.searchApiKey)
+}
+
+/**
+ * The build-time client for getStaticPaths. Returning it as the port here,
+ * in a .ts file, is what makes tsc check the real client against
+ * SearchClientPort: `pnpm typecheck` does not type-check .astro files.
+ */
+export function createCatalogSearchClient(config: AlgoliaEnvConfig): SearchClientPort {
+  const client = createSearchClient(config)
+  return {
+    search: async ({ requests }) => {
+      const response = await client.search<CatalogRecord>({ requests })
+      return {
+        results: response.results.map((result) => {
+          // Only hit queries are sent, so a facet response means a contract break.
+          if (!('hits' in result)) throw new Error('Expected a hits response from Algolia, got facet values')
+          return { hits: result.hits, nbPages: result.nbPages ?? 0 }
+        }),
+      }
+    },
+  }
 }
