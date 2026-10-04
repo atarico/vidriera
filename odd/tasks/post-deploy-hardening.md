@@ -85,7 +85,15 @@ index holds one valid product, and planting a bad one would need a Studio edit.
 The writer added `required()` to the Studio currency field beyond the brief. Kept:
 the only existing product already has `ARS`.
 
-Native review: assessed medium, under the slice budget, so no review was due.
+Native review: due once the slice reached 529 authored lines since `a3c222a`
+(`slice_budget_reached`). The user granted it. One reliability lens ran and approved;
+lineage `review-5a56f870dc3d2295`, acknowledged. Two non-blocking findings, left as
+follow-ups:
+
+- `R3-cf-rewrite-untested` (warning): the CloudFront index rewrite in
+  `infra/terraform/storefront.tf` has no automated test; it was verified only live.
+- `R3-currency-empty-string` (suggestion): the mapping stores a missing currency as
+  `''`, which the storefront then renders as a plain number.
 
 ## Next step
 
