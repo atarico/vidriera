@@ -26,6 +26,13 @@ describe('buildProductProjection', () => {
     expect(projection).toContain('"tags": tags')
   })
 
+  it('projects imageSourceUrls as an array even when the product has no images', () => {
+    // GROQ yields null for `images[].asset->url` when `images` is unset, and
+    // the indexer maps over this field unguarded.
+    const projection = buildProductProjection(profile)
+    expect(projection).toContain('"imageSourceUrls": coalesce(images[defined(asset)].asset->url, [])')
+  })
+
   it('never hardcodes an attribute name absent from the profile', () => {
     const projection = buildProductProjection({ ...profile, attributes: [] })
     expect(projection).not.toContain('brand')

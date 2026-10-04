@@ -24,7 +24,7 @@ export function buildProductProjection(profile: RubroProfile): string {
     currency,
     inStock,
     "category": category->title,
-    "imageSourceUrls": images[].asset->url,
+    "imageSourceUrls": coalesce(images[defined(asset)].asset->url, []),
     "attributes": {${attributeFields}},
     "updatedAt": _updatedAt
   }`
