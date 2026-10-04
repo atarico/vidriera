@@ -41,6 +41,29 @@ resource "aws_cloudfront_origin_access_control" "storefront" {
   signing_protocol                  = "sigv4"
 }
 
+# default_root_object only applies to "/". Astro emits every other page as
+# <path>/index.html, and the S3 REST origin does not resolve directories, so
+# /productos/<slug>/ returned 403 without this rewrite. CloudFront Functions
+# are free up to 2M invocations/month, permanently.
+resource "aws_cloudfront_function" "storefront_index_rewrite" {
+  name    = "${local.name_prefix}-storefront-index-rewrite"
+  runtime = "cloudfront-js-2.0"
+  comment = "Rewrite directory URIs to their index.html"
+  publish = true
+  code    = <<-EOT
+    function handler(event) {
+      var request = event.request;
+      var uri = request.uri;
+      if (uri.endsWith('/')) {
+        request.uri = uri + 'index.html';
+      } else if (uri.split('/').pop().indexOf('.') === -1) {
+        request.uri = uri + '/index.html';
+      }
+      return request;
+    }
+  EOT
+}
+
 resource "aws_cloudfront_distribution" "storefront" {
   enabled             = true
   is_ipv6_enabled     = true
@@ -70,6 +93,20 @@ resource "aws_cloudfront_distribution" "storefront" {
     # compression, no cookies/query-string forwarding -- the right default
     # for a static storefront with no per-request personalization.
     cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.storefront_index_rewrite.arn
+    }
+  }
+
+  # The bucket policy grants s3:GetObject but not s3:ListBucket, so S3
+  # answers a missing key with 403, not 404. Serve the site's own 404 page.
+  custom_error_response {
+    error_code            = 403
+    response_code         = 404
+    response_page_path    = "/404.html"
+    error_caching_min_ttl = 60
   }
 
   restrictions {
