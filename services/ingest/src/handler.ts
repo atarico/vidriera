@@ -23,6 +23,13 @@ function jsonResponse(statusCode: number, body: unknown): APIGatewayProxyStructu
   }
 }
 
+// The response body only reaches the webhook sender, so log every rejection
+// too. Status and reason only: never the body or the signature header.
+function reject(statusCode: number, reason: string): APIGatewayProxyStructuredResultV2 {
+  console.error(`Rejecting webhook (${statusCode}): ${reason}`)
+  return jsonResponse(statusCode, { message: reason })
+}
+
 /**
  * Thin Lambda handler: parses the event, delegates the accept/reject and
  * mapping decisions to pure domain functions, and calls the queue port.
@@ -46,19 +53,19 @@ export function createHandler(deps: HandlerDependencies) {
     })
 
     if (!decision.accepted) {
-      return jsonResponse(decision.statusCode, { message: decision.reason })
+      return reject(decision.statusCode, decision.reason)
     }
 
     let parsedBody: unknown
     try {
       parsedBody = JSON.parse(rawBody)
     } catch {
-      return jsonResponse(400, { message: 'Request body is not valid JSON' })
+      return reject(400, 'Request body is not valid JSON')
     }
 
     const mapped = mapWebhookPayload(parsedBody, deps.now)
     if (!mapped.ok) {
-      return jsonResponse(400, { message: mapped.reason })
+      return reject(400, mapped.reason)
     }
 
     await deps.queue.enqueue(mapped.message)

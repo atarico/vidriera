@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEventV2 } from 'aws-lambda'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import type { IngestMessage } from '@vidriera/contracts'
 import { createHandler } from './handler'
 import type { IngestQueue, WebhookSignatureVerifier } from './ports'
@@ -121,5 +121,62 @@ describe('ingest handler', () => {
 
     expect(response.statusCode).toBe(400)
     expect(queue.enqueued).toEqual([])
+  })
+
+  describe('rejection logging', () => {
+    // The response body only reaches the webhook sender, so without a log
+    // line every rejection is invisible in CloudWatch.
+    let errorSpy: MockInstance<typeof console.error>
+
+    beforeEach(() => {
+      errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+      errorSpy.mockRestore()
+    })
+
+    function handlerWith(verifier: WebhookSignatureVerifier) {
+      return createHandler({
+        verifier,
+        queue: fakeQueue(),
+        now: () => new Date(NOW_MS).toISOString(),
+        nowMs: () => NOW_MS,
+        maxClockSkewMs: MAX_CLOCK_SKEW_MS,
+      })
+    }
+
+    it('logs the status and reason of a signature rejection', async () => {
+      await handlerWith(fakeVerifier({ isValid: false, timestampMs: null }))(buildEvent())
+
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+      expect(errorSpy).toHaveBeenCalledWith('Rejecting webhook (401): Invalid signature')
+    })
+
+    it('logs the status and reason of a body that is not JSON', async () => {
+      await handlerWith(fakeVerifier())(buildEvent({ body: 'not json' }))
+
+      expect(errorSpy).toHaveBeenCalledWith('Rejecting webhook (400): Request body is not valid JSON')
+    })
+
+    it('logs the status and reason of a payload that fails mapping', async () => {
+      await handlerWith(fakeVerifier())(buildEvent({ body: JSON.stringify({ operation: 'upsert' }) }))
+
+      expect(errorSpy).toHaveBeenCalledWith('Rejecting webhook (400): Missing or invalid "documentId"')
+    })
+
+    it('never logs the signature header or the body', async () => {
+      await handlerWith(fakeVerifier({ isValid: false, timestampMs: null }))(buildEvent())
+
+      const logged = errorSpy.mock.calls.flat().join(' ')
+      expect(logged).not.toContain('v1=fake')
+      expect(logged).not.toContain('product-1')
+    })
+
+    it('logs nothing for an accepted request', async () => {
+      await handlerWith(fakeVerifier())(buildEvent())
+
+      expect(errorSpy).not.toHaveBeenCalled()
+    })
   })
 })
