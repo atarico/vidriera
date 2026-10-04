@@ -87,4 +87,31 @@ describe('mapDocumentToCatalogRecord', () => {
     expect(record.inStock).toBe(false)
     expect(record.category).toBeNull()
   })
+
+  describe('currency normalization', () => {
+    const mapWith = (currency: unknown) =>
+      mapDocumentToCatalogRecord(
+        {
+          _id: 'product-4',
+          _rev: 'rev-1',
+          slug: 'product-4',
+          name: 'Product Four',
+          currency: currency as string,
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          imageSourceUrls: [],
+        },
+        profile,
+        [],
+      ).currency
+
+    it('trims and uppercases a string currency', () => {
+      expect(mapWith(' ars ')).toBe('ARS')
+    })
+
+    it('never invents a default currency when the source has none', () => {
+      expect(mapWith(undefined)).toBe('')
+      expect(mapWith(null)).toBe('')
+      expect(mapWith(42)).toBe('')
+    })
+  })
 })

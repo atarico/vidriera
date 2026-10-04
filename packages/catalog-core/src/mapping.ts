@@ -29,7 +29,8 @@ export function mapDocumentToCatalogRecord(
     name: doc.name,
     description: doc.description,
     price: doc.price ?? null,
-    currency: doc.currency,
+    // Untrusted CMS text: normalize, but never invent a default currency.
+    currency: typeof doc.currency === 'string' ? doc.currency.trim().toUpperCase() : '',
     inStock: doc.inStock ?? false,
     category: doc.category ?? null,
     images,

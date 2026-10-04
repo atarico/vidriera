@@ -17,4 +17,16 @@ describe('formatPrice', () => {
   it('never throws for a zero price', () => {
     expect(() => formatPrice(0, 'ARS')).not.toThrow()
   })
+
+  it('formats lowercase and whitespace-padded currency codes like the uppercase code', () => {
+    expect(formatPrice(1500, ' ars ')).toBe(formatPrice(1500, 'ARS'))
+  })
+
+  it.each(['', '   ', 'pesos', 'ARSS', undefined, null, 42])(
+    'falls back to a plain grouped number without throwing for invalid currency %j',
+    (currency) => {
+      const formatted = formatPrice(1500, currency as unknown as string)
+      expect(formatted).toBe('1.500')
+    },
+  )
 })

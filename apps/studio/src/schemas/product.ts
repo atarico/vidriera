@@ -58,6 +58,12 @@ export function buildProductSchema(profile: RubroProfile) {
         name: 'currency',
         title: 'Currency',
         type: 'string',
+        initialValue: 'ARS',
+        validation: (rule) =>
+          rule
+            .required()
+            .regex(/^[A-Z]{3}$/, { name: 'ISO 4217 code' })
+            .error('Currency must be a three-letter uppercase ISO 4217 code, for example ARS.'),
       }),
       defineField({
         name: 'inStock',
