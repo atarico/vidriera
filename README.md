@@ -1,145 +1,141 @@
 # Vidriera
 
-A free-to-run online catalog for a small local business: faceted product search and
-one-tap WhatsApp ordering, with **no checkout, no commission, and no monthly fee**.
-It's a straight alternative to paying Tienda Nube a subscription or Mercado Libre a
-cut of every sale, for a shop that just needs people to find a product and message
-the owner about it.
+Un catálogo online para un comercio local, con costo de operación casi nulo: búsqueda
+de productos con filtros y pedido por WhatsApp con un solo toque, **sin checkout, sin
+comisiones y sin cuota mensual**. Es una alternativa directa a pagar una suscripción a
+Tienda Nube o una comisión por venta a Mercado Libre, pensada para un negocio que solo
+necesita que la gente encuentre un producto y le escriba al dueño.
 
-The catalog's vertical ("rubro" — a hardware store, a bakery, a plant shop, anything)
-is not baked into the code. It is supplied by editing one file,
-[`packages/contracts/src/rubro.ts`](packages/contracts/src/rubro.ts), and every schema
-field, search filter, and facet in the system follows from it automatically.
+**Demo en vivo:** https://d2yzoeqa5wtiks.cloudfront.net
 
-**Live demo:** https://d2yzoeqa5wtiks.cloudfront.net
+## Cómo funciona
 
-## How it works
+- **Carga de productos.** El dueño los edita en **Sanity Studio**.
+- **Indexado.** Cuando publica un producto, Sanity dispara un webhook. Una Lambda
+  (**ingest**) verifica la firma y lo encola en **SQS**. Después otra Lambda
+  (**indexer**) optimiza las imágenes con **Cloudinary** y sube el producto a
+  **Algolia**. Los mensajes que fallan van a una cola de errores (**DLQ**), y la Lambda
+  **replay** los vuelve a encolar.
+- **Tienda.** Es un sitio estático hecho con **Astro + React**, alojado en
+  **S3 + CloudFront**. Ninguna parte del tráfico de clientes pasa por un servidor: las
+  páginas son HTML estático y la búsqueda va directo a Algolia con una clave de solo
+  lectura. Al tocar un producto se abre WhatsApp con un mensaje ya escrito.
+- **Reindexado completo.** Cuando hace falta reindexar todo, se lanza a demanda una
+  tarea en **ECS Fargate**, que termina sola. No es un servicio prendido 24/7.
+- **Costos.** Toda la infraestructura está en **Terraform** y tiene una **alarma de
+  presupuesto en USD 1**.
 
-- **Adding products.** The shop owner edits products in **Sanity Studio**.
-- **Indexing.** Publishing a product fires a Sanity webhook. The **ingest** Lambda
-  verifies its signature and queues it in **SQS**. The **indexer** Lambda optimizes
-  the images through **Cloudinary** and writes the product to **Algolia**. Messages
-  that keep failing land in a dead-letter queue (**DLQ**), and the **replay** Lambda
-  puts them back on the main queue.
-- **The storefront.** A static site built with **Astro + React**, hosted on
-  **S3 + CloudFront**. No server handles customer traffic: pages are static HTML and
-  search goes straight to Algolia with a read-only key. Tapping a product opens
-  WhatsApp with a prefilled message.
-- **Full reindex.** When everything needs reindexing, an **ECS Fargate** task runs on
-  demand and exits. It is not a service left running 24/7.
-- **Costs.** All infrastructure is in **Terraform**, with a **USD 1 budget alarm**.
+**Lo más interesante:** sirve para cualquier rubro (ferretería, panadería, vivero, lo
+que sea). El rubro se define editando un solo archivo,
+[`packages/contracts/src/rubro.ts`](packages/contracts/src/rubro.ts), y de ahí salen
+automáticamente los campos del schema, los filtros y los facets.
 
-**The interesting part:** it works for any rubro (hardware store, bakery, plant
-nursery, anything). The rubro is defined by editing a single file,
-[`packages/contracts/src/rubro.ts`](packages/contracts/src/rubro.ts), and the schema
-fields, search filters and facets all follow from it automatically.
-
-It is a **pnpm monorepo**, with a hexagonal architecture in
+Es un **monorepo con pnpm**, con arquitectura hexagonal en
 [`packages/catalog-core`](packages/catalog-core).
 
 ```
 ┌──────────────┐  webhook   ┌────────┐  SQS   ┌─────────┐  upsert   ┌─────────┐
 │ Sanity Studio │──────────▶│ ingest │───────▶│ indexer │──────────▶│ Algolia │
-│ (content edit)│  (Lambda) │(Lambda)│ (queue)│ (Lambda)│ (Cloudinary│ (search │
-└──────────────┘            └────────┘        └────┬────┘  images)  │  index) │
-                                                     │ fails         └────┬────┘
+│ (edición)     │  (Lambda) │(Lambda)│ (cola) │ (Lambda)│(imágenes  │ (índice │
+└──────────────┘            └────────┘        └────┬────┘ Cloudinary)│búsqueda)│
+                                                     │ falla         └────┬────┘
                                                      │ maxReceiveCount    │
                                                      ▼                    │
                                               ┌─────────────┐            │
                                               │     DLQ     │            │
-                                              │ (parked msg)│            │
+                                              │ (en espera) │            │
                                               └──────┬──────┘            │
-                                                      │ manual/scheduled │
+                                                      │ manual/programado│
                                                       ▼                  │
                                                 ┌──────────┐             │
                                                 │  replay  │─────────────┘
-                                                │ (Lambda) │  back to main queue
+                                                │ (Lambda) │  vuelve a la cola principal
                                                 └──────────┘
 
-┌──────────────────┐  throttled full walk   ┌─────────┐
-│  reindex-worker   │───────────────────────▶│ Algolia │   (ECS Fargate, on demand —
-│ (ECS Fargate task) │                        └─────────┘    not a 24/7 service)
+┌──────────────────┐  recorrido completo    ┌─────────┐
+│  reindex-worker   │───────────────────────▶│ Algolia │   (ECS Fargate, a demanda,
+│ (tarea ECS Fargate)│  con límite de ritmo   └─────────┘    no un servicio 24/7)
 └────────────────────┘
 
-┌───────────┐  live search   ┌──────────────────┐
-│  Customer  │◀──────────────▶│ Astro storefront  │  (static, S3 + CloudFront,
-│  (phone)   │  tap → WhatsApp│  + React island   │   search-only Algolia key)
+┌───────────┐  búsqueda      ┌──────────────────┐
+│  Cliente   │◀──────────────▶│  Tienda Astro     │  (estática, S3 + CloudFront,
+│ (celular)  │ toque→WhatsApp │  + isla React     │   clave de Algolia de lectura)
 └───────────┘                └───────────────────┘
 ```
 
-Why it's shaped this way — including why the indexer is a Lambda but the bulk
-reindex is an ECS task, and why replay exists at all — is covered in
+Por qué está armado así (por ejemplo, por qué el indexer es una Lambda pero el
+reindexado completo es una tarea de ECS, y para qué existe replay) se explica en
 [`docs/architecture.md`](docs/architecture.md).
 
-## Repository layout
+## Estructura del repositorio
 
-| Path | What it is |
-|------|------------|
-| `packages/contracts` | Shared types (`CatalogRecord`, `RubroProfile`) and the pure derivation functions everything else is built on. **The one file to edit for a new vertical: `src/rubro.ts`.** |
-| `packages/catalog-core` | Hexagonal domain logic shared by the indexer and the reindex worker (mapping, idempotency, Algolia/Cloudinary/Sanity adapters). |
-| `apps/studio` | Sanity Studio v6 — where the shop owner edits products. |
-| `apps/storefront` | The public Astro + React storefront customers browse. |
-| `services/ingest` | Lambda: verifies the Sanity webhook signature, enqueues to SQS. |
-| `services/indexer` | Lambda: consumes the queue, derives images via Cloudinary, upserts into Algolia. |
-| `services/replay` | Lambda: drains the dead-letter queue back to the main queue. |
-| `services/reindex-worker` | ECS Fargate task: throttled full reindex of every Sanity document. |
-| `infra/terraform` | All AWS infrastructure, including the USD 1 budget alarm. |
-| `docs/` | Credential reference, account setup checklist, architecture rationale, operational runbook. |
+| Ruta | Qué es |
+|------|--------|
+| `packages/contracts` | Tipos compartidos (`CatalogRecord`, `RubroProfile`) y las funciones puras de las que deriva todo lo demás. **El único archivo a editar para un rubro nuevo: `src/rubro.ts`.** |
+| `packages/catalog-core` | Lógica de dominio hexagonal que comparten el indexer y el reindex worker (mapeo, idempotencia, adaptadores de Algolia, Cloudinary y Sanity). |
+| `apps/studio` | Sanity Studio v6, donde el dueño edita los productos. |
+| `apps/storefront` | La tienda pública en Astro + React que navegan los clientes. |
+| `services/ingest` | Lambda: verifica la firma del webhook de Sanity y encola en SQS. |
+| `services/indexer` | Lambda: consume la cola, genera las imágenes con Cloudinary y escribe en Algolia. |
+| `services/replay` | Lambda: vacía la cola de errores y devuelve los mensajes a la cola principal. |
+| `services/reindex-worker` | Tarea de ECS Fargate: reindexado completo de todos los documentos de Sanity, con límite de ritmo. |
+| `infra/terraform` | Toda la infraestructura de AWS, incluida la alarma de presupuesto en USD 1. |
+| `docs/` | Referencia de credenciales, checklist de creación de cuentas, fundamentos de la arquitectura y runbook operativo. |
 
-## Running it locally
+## Correrlo localmente
 
-Requires Node ≥22.12 and pnpm (see `package.json`'s `packageManager` field for the
-exact pinned version — `corepack enable` will pick it up automatically).
+Requiere Node ≥22.12 y pnpm (la versión exacta está fijada en el campo
+`packageManager` de `package.json`; `corepack enable` la toma automáticamente).
 
 ```bash
 pnpm install
-pnpm test          # pnpm vitest run — all unit tests, no AWS/Sanity/Algolia account needed
+pnpm test          # pnpm vitest run: todos los tests unitarios, sin cuentas de AWS, Sanity ni Algolia
 pnpm typecheck
 pnpm lint
 ```
 
-To run a single app:
+Para correr una sola app:
 
 ```bash
-pnpm --filter @vidriera/studio dev        # Sanity Studio, needs SANITY_STUDIO_* vars
-pnpm --filter @vidriera/storefront dev    # Astro storefront, needs PUBLIC_ALGOLIA_* vars
-pnpm --filter @vidriera/storefront build  # static production build
+pnpm --filter @vidriera/studio dev        # Sanity Studio, necesita las variables SANITY_STUDIO_*
+pnpm --filter @vidriera/storefront dev    # tienda Astro, necesita las variables PUBLIC_ALGOLIA_*
+pnpm --filter @vidriera/storefront build  # build estático de producción
 ```
 
-**No `.env` file ships in this repo** (the sandbox this project was built in refuses to
-write one, and it would be the wrong place for secrets anyway once real accounts exist).
-Every variable any service reads — what it's for, where to get it, and whether it's a
-secret — is documented in [`docs/environment.md`](docs/environment.md). Without any
-environment variables set, the storefront still builds successfully: it renders a
-"not configured yet" state instead of crashing, which is exactly what this repository
-ships with today (see "What's left to do," below).
+**El repositorio no incluye ningún archivo `.env`**: los secretos no van en el repo.
+Todas las variables que lee cada servicio (para qué sirven, de dónde sacarlas y si son
+secretas) están documentadas en [`docs/environment.md`](docs/environment.md). Sin
+variables de entorno, la tienda igual buildea: muestra un estado de "todavía no
+configurado" en lugar de romperse.
 
-## Deploying
+## Deploy
 
-Three things deploy independently:
+Hay tres partes que se deployan por separado:
 
-1. **Sanity Studio** — `pnpm --filter @vidriera/studio run deploy` with
-   `SANITY_STUDIO_PROJECT_ID` and `SANITY_STUDIO_DATASET` set (needs a Sanity account;
-   hosted on Sanity's own infrastructure, free).
-2. **Infrastructure** — `terraform apply` from `infra/terraform`, after filling in
-   `terraform.tfvars` (copy from `terraform.tfvars.example`). Provisions the queues,
-   Lambdas, ECS cluster, and the S3 + CloudFront storefront hosting.
-3. **Storefront static build** — `pnpm --filter @vidriera/storefront build`, then
-   `aws s3 sync apps/storefront/dist s3://<storefront_bucket_name> --delete` followed
-   by a CloudFront invalidation. Bucket name and distribution ID come from
+1. **Sanity Studio**: `pnpm --filter @vidriera/studio run deploy`, con
+   `SANITY_STUDIO_PROJECT_ID` y `SANITY_STUDIO_DATASET` definidas (necesita una cuenta
+   de Sanity; se aloja gratis en la infraestructura de Sanity).
+2. **Infraestructura**: `terraform apply` desde `infra/terraform`, después de completar
+   `terraform.tfvars` (copiado de `terraform.tfvars.example`). Crea las colas, las
+   Lambdas, el cluster de ECS y el hosting de la tienda en S3 + CloudFront.
+3. **Build estático de la tienda**: `pnpm --filter @vidriera/storefront build`, después
+   `aws s3 sync apps/storefront/dist s3://<storefront_bucket_name> --delete` y una
+   invalidación de CloudFront. El nombre del bucket y el ID de la distribución salen de
    `terraform output`.
 
-The full, ordered account-creation and deploy checklist — starting with the budget
-alarm, before any `terraform apply` — is in [`docs/setup.md`](docs/setup.md).
-Day-two operations (DLQ replay, full reindex, cost checks) are in
+El checklist completo y ordenado para crear las cuentas y deployar (empezando por la
+alarma de presupuesto, antes de cualquier `terraform apply`) está en
+[`docs/setup.md`](docs/setup.md). La operación del día a día (replay de la cola de
+errores, reindexado completo, control de costos) está en
 [`docs/runbook.md`](docs/runbook.md).
 
-## What's left to do
+## Qué falta
 
-The platform is deployed and verified end to end (see the "Deployment" section of
-[`odd/tasks/catalog-platform.md`](odd/tasks/catalog-platform.md)). What remains:
+La plataforma está deployada y verificada de punta a punta (ver la sección
+"Deployment" de [`odd/tasks/catalog-platform.md`](odd/tasks/catalog-platform.md)).
+Queda:
 
-- Replace `packages/contracts/src/rubro.ts` with the business's actual vertical
-  (fields, facets) once it's decided. No other file needs to change.
-- Swap the placeholder WhatsApp number for the business's own, and add a custom
-  domain in place of the `*.cloudfront.net` address.
+- Reemplazar `packages/contracts/src/rubro.ts` por el rubro real del negocio (campos y
+  facets) cuando esté definido. No hace falta tocar ningún otro archivo.
+- Cambiar el número de WhatsApp provisorio por el del negocio y agregar un dominio
+  propio en lugar de la dirección `*.cloudfront.net`.
