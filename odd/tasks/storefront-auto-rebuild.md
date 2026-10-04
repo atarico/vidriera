@@ -54,8 +54,14 @@ the trigger fires **after** the indexer writes, never straight from the Sanity w
 
 ## Tasks
 
-- [ ] T1 `RebuildTrigger` port, GitHub dispatch adapter and no-op adapter, with tests.
-- [ ] T2 Wire the trigger into the indexer handler and the reindex worker, with tests.
+- [x] T1 `RebuildTrigger` port, GitHub dispatch adapter and no-op adapter, with tests.
+  Commit `79096ae`. Route: delegated writer. RED was observed first: the module was
+  missing, then GREEN.
+- [x] T2 Wire the trigger into the indexer handler and the reindex worker, with tests.
+  Commit `ea49a34`. Route: delegated writer. RED: the "triggers exactly once" and
+  "trigger fails" tests failed first. Checks: `pnpm test` 209 passed (baseline 191),
+  `pnpm typecheck` and `pnpm lint` clean. `pnpm format` fails on 36 files that were
+  already unformatted on `main`; every touched file is prettier-clean.
 - [ ] T3 Terraform: variables, SSM, Lambda and ECS environment, OIDC provider, deploy
   role, outputs, and `terraform.tfvars.example`.
 - [ ] T4 GitHub Actions deploy workflow.
@@ -91,7 +97,15 @@ non-trivial files in `catalog-core`, the indexer and the reindex worker.
 ## Progress
 
 - Branch `feat/storefront-auto-rebuild` created from `main` (`3d5625c`).
+- Native review of PR1 (`3d5625c..ea49a34`): assessed as medium,
+  `slice_budget_reached`. The user granted it. One reliability lens ran and **approved**
+  it; lineage `review-207c75296349b5b2`, acknowledged. Two non-blocking findings:
+  - `R3-reindex-halfconfig-after-work` (warning): a half-configured token/repository
+    pair throws before the reindex starts. Planned for T3: a Terraform validation that
+    requires both values or neither, so this state cannot be deployed.
+  - `R3-no-env-builder-tests` (suggestion): the env-selection helper is duplicated in
+    the indexer and the reindex worker, and neither copy is tested. Follow-up.
 
 ## Next step
 
-T1 and T2 through a delegated writer.
+Push PR1 and open it (the user's decision), then T3–T5 on a new branch after it merges.
