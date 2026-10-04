@@ -11,15 +11,31 @@ is not baked into the code. It is supplied by editing one file,
 [`packages/contracts/src/rubro.ts`](packages/contracts/src/rubro.ts), and every schema
 field, search filter, and facet in the system follows from it automatically.
 
-## The 30-second version
+**Live demo:** https://d2yzoeqa5wtiks.cloudfront.net
 
-A shop owner edits products in a **Sanity Studio**. Saving a product fires a webhook
-that lands the change in **Algolia**, with images optimized through **Cloudinary**,
-usually within a few seconds. Customers find products on a static **Astro storefront**
-hosted for pennies on **S3 + CloudFront**, filter by whatever facets the rubro profile
-defines, and tap a product to open WhatsApp with a prefilled message. There is no
-server serving customer traffic — the storefront is static HTML, and the only compute
-that ever runs is short-lived AWS Lambda functions reacting to content changes.
+## How it works
+
+- **Adding products.** The shop owner edits products in **Sanity Studio**.
+- **Indexing.** Publishing a product fires a Sanity webhook. The **ingest** Lambda
+  verifies its signature and queues it in **SQS**. The **indexer** Lambda optimizes
+  the images through **Cloudinary** and writes the product to **Algolia**. Messages
+  that keep failing land in a dead-letter queue (**DLQ**), and the **replay** Lambda
+  puts them back on the main queue.
+- **The storefront.** A static site built with **Astro + React**, hosted on
+  **S3 + CloudFront**. No server handles customer traffic: pages are static HTML and
+  search goes straight to Algolia with a read-only key. Tapping a product opens
+  WhatsApp with a prefilled message.
+- **Full reindex.** When everything needs reindexing, an **ECS Fargate** task runs on
+  demand and exits. It is not a service left running 24/7.
+- **Costs.** All infrastructure is in **Terraform**, with a **USD 1 budget alarm**.
+
+**The interesting part:** it works for any rubro (hardware store, bakery, plant
+nursery, anything). The rubro is defined by editing a single file,
+[`packages/contracts/src/rubro.ts`](packages/contracts/src/rubro.ts), and the schema
+fields, search filters and facets all follow from it automatically.
+
+It is a **pnpm monorepo**, with a hexagonal architecture in
+[`packages/catalog-core`](packages/catalog-core).
 
 ```
 ┌──────────────┐  webhook   ┌────────┐  SQS   ┌─────────┐  upsert   ┌─────────┐
@@ -102,8 +118,9 @@ ships with today (see "What's left to do," below).
 
 Three things deploy independently:
 
-1. **Sanity Studio** — `pnpm --filter @vidriera/studio run deploy` (needs a Sanity
-   account; hosted on Sanity's own infrastructure, free).
+1. **Sanity Studio** — `pnpm --filter @vidriera/studio run deploy` with
+   `SANITY_STUDIO_PROJECT_ID` and `SANITY_STUDIO_DATASET` set (needs a Sanity account;
+   hosted on Sanity's own infrastructure, free).
 2. **Infrastructure** — `terraform apply` from `infra/terraform`, after filling in
    `terraform.tfvars` (copy from `terraform.tfvars.example`). Provisions the queues,
    Lambdas, ECS cluster, and the S3 + CloudFront storefront hosting.
@@ -119,13 +136,10 @@ Day-two operations (DLQ replay, full reindex, cost checks) are in
 
 ## What's left to do
 
-This repository was built before any of the external accounts (Sanity, Algolia,
-Cloudinary, AWS) existed and before the business's actual vertical was decided — see
-`odd/tasks/catalog-platform.md`'s "Blocked on user" section. Nothing in the code
-depends on real credentials to build or test; deploying against a real shop does:
+The platform is deployed and verified end to end (see the "Deployment" section of
+[`odd/tasks/catalog-platform.md`](odd/tasks/catalog-platform.md)). What remains:
 
-- Create the four accounts and the AWS budget alarm — [`docs/setup.md`](docs/setup.md).
 - Replace `packages/contracts/src/rubro.ts` with the business's actual vertical
   (fields, facets) once it's decided. No other file needs to change.
-- Set a real `PUBLIC_WHATSAPP_NUMBER` and `PUBLIC_SITE_URL` for the storefront.
-- Run `terraform apply`, deploy the Studio, and build + sync the storefront.
+- Swap the placeholder WhatsApp number for the business's own, and add a custom
+  domain in place of the `*.cloudfront.net` address.

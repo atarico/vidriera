@@ -112,15 +112,20 @@ Push, pull request creation, and merge remain user decisions.
 | terraform | v1.16.3 (installed from `hashicorp/tap`; not in brew core since the BUSL relicense) |
 | aws cli | 2.36.50 |
 
-## Blocked on user (external accounts)
+## External accounts
 
-Code does not depend on these, but deployment does. None can be created by the agent.
+All created by the user between 2026-09-22 and 2026-10-03. Credentials live in the
+user's password manager and in the gitignored `infra/terraform/terraform.tfvars`.
 
-- [ ] Sanity account + project id + dataset + write token
-- [ ] Algolia account + app id + admin key + search-only key
-- [ ] Cloudinary account + cloud name + api key + api secret
-- [ ] AWS account + IAM user credentials + **budget alarm at USD 1 before first apply**
-- [ ] Business WhatsApp number (can be a placeholder until the rubro is known)
+- [x] Sanity — project `11onurs5`, dataset `production` (public, so no token is
+      needed). Studio at https://vidriera.sanity.studio/
+- [x] Algolia — app `XCJS31TFCM`, index `vidriera_catalog`. The storefront key is
+      read-only but carries `browse`, `listIndexes` and `settings` besides `search`.
+- [x] Cloudinary — cloud `z27nqavc`
+- [x] AWS — account on the Free plan, root protected by a passkey, a dedicated
+      `vidriera-terraform` IAM user, budget alarm at USD 1 provisioned by Terraform,
+      SNS alert subscription confirmed.
+- [x] WhatsApp number — set (a personal mobile until the business number exists)
 
 ## Progress
 
@@ -443,48 +448,51 @@ re-run by the orchestrator:
 
 Nothing was deployed. No AWS resource exists yet; no account has been created.
 
-## Remaining work — all of it needs the user
+## Deployment — 2026-10-03 to 2026-10-04
 
-1. Create the four accounts and fill `infra/terraform/terraform.tfvars`, following
-   `docs/setup.md`. **The AWS budget alarm at USD 1 comes before the first
-   `terraform apply`.**
-2. Confirm the SNS subscription email, or every alarm fires into nothing.
-3. Decide the `.env*` question: either grant write access so `.env.example` can exist,
-   or keep `docs/environment.md` as the credential reference.
-4. **Supply the rubro.** Then only `packages/contracts/src/rubro.ts` changes, and the
+Deployed to AWS account `us-east-1`, environment `dev`. Storefront live at
+https://d2yzoeqa5wtiks.cloudfront.net. The full path was verified with real
+traffic: a product published in the Studio reached Algolia through the webhook,
+the ingest Lambda, SQS and the indexer, and appears in the live search page. One
+Fargate reindex task ran to exit 0.
+
+### Eight defects that only a real deploy surfaced
+
+Every earlier check passed: `terraform validate`, 174 tests, the static build. None
+of them executed `terraform apply`, a webhook from Sanity, or the deployed site.
+
+| # | Defect | Fix |
+|---|--------|-----|
+| 1 | `local-exec` used `set -o pipefail` under `/bin/sh` (dash) | `76321aa` |
+| 2 | Relative `build_dir`: esbuild wrote to the repo root, the zip read from `infra/terraform` | `76321aa` |
+| 3 | Saved `tfplan` files (they embed secrets) were not gitignored | `2de434e` |
+| 4 | GROQ returns `null` for `images[].asset->url` on a product without images; the indexer crashed | `7bbd636` |
+| 5 | The ingest Lambda never logged rejections, so an empty webhook secret failed silently | `7bd3b6a` |
+| 6 | `.dockerignore` let `terraform.tfvars` into the worker build context; the docs built from the wrong context | `0cb7313` |
+| 7 | Algolia v5 rejects a nested `params` object; every product page failed to build | `3f28507` |
+| 8 | S3 behind CloudFront does not resolve `/dir/` to `index.html`; product pages returned 403 | `dfe4072` |
+
+Defects 4 and 7 belong to the class JD-1 names: content or vendor responses that do
+not match what the code assumes, reaching code that throws. Defect 7 cannot be caught
+by the compiler at all: the vendor's union types accept the wrong shape. Only the
+runtime test that pins the request shape guards it.
+
+## Remaining work
+
+JD-1 and the favicon are tracked in `odd/tasks/post-deploy-hardening.md`.
+
+Still needs the user:
+
+1. **Supply the rubro.** Then only `packages/contracts/src/rubro.ts` changes; the
    Sanity schema, the Algolia facets and the storefront filters all follow from it.
+2. Optionally, a strictly `search`-only Algolia key for the storefront.
+3. Optionally, a backup MFA device on the AWS root user.
 
-## Next step — two open items, both deferred by the user on 2026-09-22
+The `.env*` question is settled in practice: there is no `.env` file. Builds take
+their `PUBLIC_*` values inline and Terraform reads `terraform.tfvars`;
+`docs/environment.md` stays the reference.
 
-### 1. JD-1 is open and unfixed (CRITICAL)
+## Engram memory
 
-A product saved with a blank or non-ISO currency fails the entire `astro build`.
-Reproduced by execution, not inferred — see the Judgment Day ledger above for the table.
-
-The user deferred the fix. The design question is still unanswered and should be settled
-before writing code: **fix the class, or patch the field?**
-
-The recommendation on record is to fix the class. `currency` is the second instance of
-the same pattern in two commits — untrusted CMS content reaching a throwing built-in
-during static prerender, where one bad record takes down every page. D1 (the lone
-surrogate in `whatsapp.ts`) was the first. Patching field by field invites a third
-instance in `slug`, an image URL, or any other field a shop owner fills in unexpectedly.
-
-### 2. The rubro is still unknown
-
-When it arrives, only `packages/contracts/src/rubro.ts` changes. The Sanity schema, the
-Algolia facets and the storefront filters all derive from it.
-
-## Engram memory could not be written
-
-Three save attempts failed with `ambiguous_project`. Cause: the Engram MCP server runs
-with `/home/atarico/Escritorio/proyectos` as its working directory, finds roughly thirty
-git repositories inside it, and cannot resolve which one this is. It accepts only
-projects it already knows, and `vidriera` is not among them.
-
-`.engram/config.json` has been added to this repository, which resolves the project when
-the working directory **is** this repository. Starting the next session from inside
-`/home/atarico/Escritorio/proyectos/vidriera` should therefore let memory save normally.
-
-Nothing was lost. This document is the durable record, and it is committed. Memory was
-the backup, not the source of truth.
+Resolved. Sessions started inside this repository save to the `vidriera` project
+normally.
