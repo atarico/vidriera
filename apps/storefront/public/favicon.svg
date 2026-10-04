@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Neutral shop-window mark in the storefront palette (global.css tokens). -->
+  <rect width="32" height="32" rx="7" fill="#19140f"/>
+  <path d="M7 11h18l-1.5-4h-15z" fill="#d9540f"/>
+  <rect x="8" y="13" width="16" height="12" rx="1.5" fill="#faf5ea"/>
+  <rect x="14.5" y="13" width="3" height="12" fill="#19140f"/>
+</svg>
