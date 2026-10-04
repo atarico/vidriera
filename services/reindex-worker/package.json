@@ -1,0 +1,19 @@
+{
+  "name": "@vidriera/reindex-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/run.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/index.cjs"
+  },
+  "dependencies": {
+    "@vidriera/contracts": "workspace:*",
+    "@vidriera/catalog-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "esbuild": "^0.28.2"
+  }
+}

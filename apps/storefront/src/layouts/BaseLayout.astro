@@ -1,0 +1,58 @@
+---
+import '../styles/global.css'
+import Header from '../components/Header.astro'
+import Footer from '../components/Footer.astro'
+import { copy } from '../lib/copy'
+
+export interface Props {
+  title: string
+  description: string
+  /** Absolute URL to an og:image, when known (product pages pass their `og` rendition). */
+  image?: string
+  /** Absolute canonical URL for this page. */
+  url?: string
+  type?: 'website' | 'product'
+}
+
+const { title, description, image, url, type = 'website' } = Astro.props
+const siteName = import.meta.env.PUBLIC_SITE_NAME || copy.site.defaultName
+const pageTitle = title === siteName ? title : `${title} · ${siteName}`
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+
+    <!--
+      og: tags are the whole reason product pages are prerendered static
+      HTML rather than client-rendered: WhatsApp's link-preview crawler
+      does not execute JavaScript, so these tags must already be in the
+      response body.
+    -->
+    <meta property="og:type" content={type} />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    {url ? <meta property="og:url" content={url} /> : null}
+    {image ? <meta property="og:image" content={image} /> : null}
+    <meta name="twitter:card" content={image ? 'summary_large_image' : 'summary'} />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <Header siteName={siteName} />
+    <div class="page-shell">
+      <slot />
+    </div>
+    <Footer siteName={siteName} />
+  </body>
+</html>

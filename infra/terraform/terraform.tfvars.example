@@ -1,0 +1,29 @@
+# Copy this file to terraform.tfvars (gitignored via the *.tfvars /
+# !*.tfvars.example pair added to the repo's .gitignore) and fill in real
+# values. Alternatively, skip a tfvars file entirely and export
+# TF_VAR_<name> environment variables instead.
+#
+# Every value here is required before `terraform apply` will work (except
+# sanity_token, which may stay empty for a public Sanity dataset).
+
+alert_email = "you@example.com"
+
+# --- Sanity ---
+sanity_webhook_secret = "REPLACE_ME" # configured on the Sanity webhook itself; pick any strong random string
+sanity_project_id     = "REPLACE_ME"
+sanity_dataset        = "production"
+sanity_token          = "" # leave empty for a public dataset; set a read token otherwise
+
+# --- Cloudinary ---
+cloudinary_cloud_name = "REPLACE_ME"
+cloudinary_api_key    = "REPLACE_ME"
+cloudinary_api_secret = "REPLACE_ME"
+
+# --- Algolia ---
+algolia_app_id         = "REPLACE_ME"
+algolia_admin_api_key  = "REPLACE_ME"
+algolia_index_name     = "vidriera_catalog"
+
+# --- Optional overrides (sensible defaults already set in variables.tf) ---
+# aws_region  = "us-east-1"
+# environment = "dev"

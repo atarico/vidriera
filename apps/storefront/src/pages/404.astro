@@ -1,0 +1,12 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import { copy } from '../lib/copy'
+---
+
+<BaseLayout title={copy.product.notFoundTitle} description={copy.product.notFoundBody}>
+  <div class="product-not-found">
+    <h1>{copy.product.notFoundTitle}</h1>
+    <p>{copy.product.notFoundBody}</p>
+    <a class="whatsapp-cta" href="/">{copy.product.backToSearch}</a>
+  </div>
+</BaseLayout>

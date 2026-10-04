@@ -1,0 +1,107 @@
+---
+import type { GetStaticPaths } from 'astro'
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import { createCatalogSearchClient } from '../../lib/algoliaClient'
+import { fetchAllCatalogRecords, readAlgoliaEnvConfig } from '../../lib/catalogClient'
+import { activeRubroProfile } from '../../lib/rubroProfile'
+import { productAttributeEntries } from '../../lib/productAttributes'
+import { pickRendition, primaryImage } from '../../lib/images'
+import { formatPrice } from '../../lib/price'
+import { buildWhatsAppOrderLink } from '../../lib/whatsapp'
+import { copy } from '../../lib/copy'
+
+// Every product page is prerendered at build time (see astro.config.mjs):
+// there is no server at request time, so og: tags — the thing WhatsApp's
+// link-preview crawler reads — must already be in the static HTML.
+//
+// The catalog is browsed with the SAME PUBLIC_ALGOLIA_SEARCH_API_KEY the
+// browser uses (see catalogClient.ts's comment on why `search` is used
+// instead of `browse`). When credentials are not configured yet — true for
+// this repo today, see odd/tasks/catalog-platform.md "Blocked on user" —
+// this returns zero paths and the build still succeeds; product pages
+// appear automatically once real Algolia credentials and data exist.
+export const getStaticPaths = (async () => {
+  const envConfig = readAlgoliaEnvConfig(import.meta.env)
+  if (!envConfig) return []
+
+  const client = createCatalogSearchClient(envConfig)
+  const records = await fetchAllCatalogRecords(client, envConfig.indexName)
+
+  return records.map((record) => ({
+    params: { slug: record.slug },
+    props: { record },
+  }))
+}) satisfies GetStaticPaths
+
+const { record } = Astro.props
+const siteUrl = import.meta.env.PUBLIC_SITE_URL ?? ''
+const whatsappNumber = import.meta.env.PUBLIC_WHATSAPP_NUMBER
+const productUrl = `${siteUrl}/productos/${record.slug}/`
+
+const heroImage = pickRendition(record.images, 'hero')
+const ogImage = pickRendition(record.images, 'og')
+const gallery = record.images.slice(1)
+const attributeEntries = productAttributeEntries(record, activeRubroProfile)
+
+const whatsappLink = whatsappNumber
+  ? buildWhatsAppOrderLink({ phoneNumber: whatsappNumber, productName: record.name, productUrl })
+  : null
+---
+
+<BaseLayout
+  title={record.name}
+  description={record.description ?? record.name}
+  image={ogImage}
+  url={productUrl}
+  type="product"
+>
+  <article class="product-detail">
+    <div>
+      <div class="product-detail__hero">
+        {heroImage ? <img src={heroImage} alt={record.name} /> : null}
+      </div>
+      {
+        gallery.length > 0 ? (
+          <div class="product-detail__gallery">
+            {gallery.map((image) => (
+              <img src={image.card} alt={record.name} loading="lazy" decoding="async" />
+            ))}
+          </div>
+        ) : null
+      }
+    </div>
+
+    <div>
+      {record.category ? <p class="product-detail__category">{record.category}</p> : null}
+      <h1 class="product-detail__name">{record.name}</h1>
+      <p class="product-detail__price">{formatPrice(record.price, record.currency)}</p>
+      <span
+        class={`product-detail__stock${record.inStock ? '' : ' product-detail__stock--out'}`}
+      >
+        {record.inStock ? copy.product.inStock : copy.product.outOfStock}
+      </span>
+
+      {record.description ? <p>{record.description}</p> : null}
+
+      {
+        attributeEntries.length > 0 ? (
+          <dl class="product-detail__attributes">
+            {attributeEntries.map((entry) => (
+              <div>
+                <dt>{entry.label}:</dt> <dd>{entry.value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null
+      }
+
+      {
+        whatsappLink ? (
+          <a class="whatsapp-cta" href={whatsappLink} target="_blank" rel="noopener noreferrer">
+            {copy.whatsapp.ctaLabel}
+          </a>
+        ) : null
+      }
+    </div>
+  </article>
+</BaseLayout>

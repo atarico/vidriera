@@ -1,0 +1,19 @@
+{
+  "name": "@vidriera/ingest",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/handler.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@vidriera/contracts": "workspace:*",
+    "@sanity/webhook": "^4.0.4",
+    "@aws-sdk/client-sqs": "^3.1137.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.163",
+    "@types/node": "^22.10.5"
+  }
+}

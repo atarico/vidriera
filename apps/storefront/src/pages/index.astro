@@ -1,0 +1,13 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import SearchExperience from '../islands/SearchExperience'
+import { copy } from '../lib/copy'
+
+const siteName = import.meta.env.PUBLIC_SITE_NAME || copy.site.defaultName
+const tagline = import.meta.env.PUBLIC_SITE_TAGLINE || copy.site.defaultTagline
+const siteUrl = import.meta.env.PUBLIC_SITE_URL
+---
+
+<BaseLayout title={siteName} description={tagline} url={siteUrl}>
+  <SearchExperience client:load />
+</BaseLayout>
