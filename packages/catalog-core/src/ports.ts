@@ -38,7 +38,10 @@ export interface ContentSource {
    * after `cursor` (undefined for the first page), and the cursor to use
    * for the next page (undefined once the walk is exhausted).
    */
-  listDocuments(cursor: string | undefined, limit: number): Promise<{
+  listDocuments(
+    cursor: string | undefined,
+    limit: number,
+  ): Promise<{
     documents: SourceDocument[]
     nextCursor: string | undefined
   }>
@@ -64,4 +67,14 @@ export interface SearchIndex {
   saveObject(record: CatalogRecord): Promise<void>
   deleteObject(objectID: string): Promise<void>
   applySettings(settings: IndexSettings): Promise<void>
+}
+
+export interface RebuildTrigger {
+  /**
+   * Asks the storefront build pipeline to rebuild. `reason` is a short,
+   * human-readable note for the build logs. Implementations may throw (network
+   * errors, non-2xx responses); callers decide how to contain the failure —
+   * a failed rebuild request must never fail the indexing work that preceded it.
+   */
+  trigger(reason: string): Promise<void>
 }
